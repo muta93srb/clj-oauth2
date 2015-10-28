@@ -10,17 +10,17 @@
 
 (defn- excluded? [uri oauth2-params]
   (let [exclusion (:exclude oauth2-params)]
-    (cond 
-     (coll? exclusion) 
+    (cond
+     (coll? exclusion)
      (some = exclusion uri)
-     (string? exclusion) 
+     (string? exclusion)
      (= exclusion uri)
-     (fn? exclusion) 
+     (fn? exclusion)
      (exclusion uri)
-     (instance? java.util.regex.Pattern exclusion) 
+     (instance? java.util.regex.Pattern exclusion)
      (re-matches exclusion uri))))
 
-;; Functions to store state, target URL, OAuth2 data in session         
+;; Functions to store state, target URL, OAuth2 data in session
 ;; requires ring.middleware.session/wrap-session
 (defn get-state-from-session [request]
   (:state (:session request)))
@@ -34,14 +34,14 @@
 (defn put-target-in-session [response target]
   (assoc response :session (merge (response :session) {:target target})))
 
-(defn get-oauth2-data-from-session [request] 
+(defn get-oauth2-data-from-session [request]
   (:oauth2 (:session request)))
 
 (defn put-oauth2-data-in-session [request response oauth2-data]
-  (assoc 
-      response 
-    :session (merge 
-              (or (:session response) (:session request)) 
+  (assoc
+      response
+    :session (merge
+              (or (:session response) (:session request))
               (or (find response :oauth2) {:oauth2 oauth2-data}))))
 
 (def store-data-in-session
@@ -54,14 +54,14 @@
 
 (defn request-uri [request oauth2-params]
   (let [scheme (if (:force-https oauth2-params) "https" (name (:scheme request)))
-        port (if (or (and (= (name (:scheme request)) "http") 
+        port (if (or (and (= (name (:scheme request)) "http")
                           (not= (:server-port request) 80))
-                     (and (= (name (:scheme request)) "https") 
-                          (not= (:server-port request) 443))) 
+                     (and (= (name (:scheme request)) "https")
+                          (not= (:server-port request) 443)))
                (str ":" (:server-port request)))]
     (str scheme "://" (:server-name request) port (:uri request))))
 
-;; Parameter handling code shamelessly plundered from ring.middleware. 
+;; Parameter handling code shamelessly plundered from ring.middleware.
 ;; Thanks, Mark!
 (defn- keyword-syntax? [s]
   (re-matches #"[A-Za-z*+!_?-][A-Za-z0-9*+!_?-]*" s))
@@ -115,16 +115,16 @@ create a vector of values."
   "Returns true if this is a request to the callback URL"
   (let [oauth2-url-vector (string/split (.toString (java.net.URI. (:redirect-uri oauth2-params))) #"\?")
         oauth2-uri (nth oauth2-url-vector 0)
-        oauth2-url-params (nth oauth2-url-vector 1)
+        oauth2-url-params (nth oauth2-url-vector 1 "")
         encoding (or (:character-encoding request) "UTF-8")]
     (and (= oauth2-uri (request-uri request oauth2-params))
          (submap? (keyify-params (parse-params oauth2-url-params encoding)) (:params request)))))
 
 ;; This Ring wrapper acts as a filter, ensuring that the user has an OAuth
 ;; token for all but a set of explicitly excluded URLs. The response from
-;; oauth2/get-access-token is exposed in the request via the :oauth2 key. 
+;; oauth2/get-access-token is exposed in the request via the :oauth2 key.
 ;; Requires ring.middleware.params/wrap-params and
-;; ring.middleware.keyword-params/wrap-keyword-params to have been called 
+;; ring.middleware.keyword-params/wrap-keyword-params to have been called
 ;; first.
 (defn wrap-oauth2
   [handler oauth2-params]
@@ -136,21 +136,21 @@ create a vector of values."
         ;; it in the response and redirect to the originally requested URL
         (let [response {:status 302
                         :headers {"Location" ((:get-target oauth2-params) request)}}
-              oauth2-data (oauth2/get-access-token 
-                           oauth2-params 
-                           (:params request) 
-                           (oauth2/make-auth-request 
-                            oauth2-params 
+              oauth2-data (oauth2/get-access-token
+                           oauth2-params
+                           (:params request)
+                           (oauth2/make-auth-request
+                            oauth2-params
                             ((:get-state oauth2-params) request)))]
           ((:put-oauth2-data oauth2-params) request response oauth2-data))
         ;; We're not handling the callback
         (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
-          (if (nil? oauth2-data) 
+          (if (nil? oauth2-data)
             (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
                   auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
                   target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
                   ;; Redirect to OAuth 2.0 authentication/authorization
-                  response {:status 302 
+                  response {:status 302
                             :headers {"Location" (:uri auth-req)}}]
               ((:put-target oauth2-params)  ((:put-state oauth2-params) response xsrf-protection) target))
             ;; We have oauth2 data - invoke the handler
