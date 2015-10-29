@@ -1,4 +1,4 @@
-(defproject psalaberria002/clj-oauth2 "0.5.2-SNAPSHOT"
+(defproject psalaberria002/clj-oauth2 "0.5.3"
   :description "clj-http and ring middlewares for OAuth 2.0"
   :url "https://github.com/psalaberria002/clj-oauth2"
   :dependencies [[org.clojure/clojure "1.7.0"]
