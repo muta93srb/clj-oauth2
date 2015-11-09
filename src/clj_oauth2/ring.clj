@@ -22,6 +22,8 @@
 
 ;; Functions to store state, target URL, OAuth2 data in session
 ;; requires ring.middleware.session/wrap-session
+;; state = xsrf_protection see section 10.12 of RFC6749
+;; target = (string) "/"
 (defn get-state-from-session [request]
   (:state (:session request)))
 
@@ -141,8 +143,9 @@ create a vector of values."
                            (:params request)
                            (oauth2/make-auth-request
                             oauth2-params
-                            ((:get-state oauth2-params) request)))]
-          ((:put-oauth2-data oauth2-params) request response oauth2-data))
+                            ((:get-state oauth2-params) request)))
+              oauth2-data-with-userinfo (oauth2/add-userinfo oauth2-data oauth2-params)]
+          ((:put-oauth2-data oauth2-params) request response oauth2-data-with-userinfo))
         ;; We're not handling the callback
         (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
           (if (nil? oauth2-data)

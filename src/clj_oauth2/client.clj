@@ -145,6 +145,17 @@
   [request oauth2]
   ((make-handler "token") request oauth2))
 
+
+(defn add-userinfo [oauth2-data oauth2-params]
+  (let [accesstoken (:access-token oauth2-data)
+        userinfo-endpoint (:user-info-uri oauth2-params)
+        request {:headers          {"Authorization" (str "Bearer " accesstoken)}
+                 :content-type     "application/json"
+                 :throw-exceptions false}
+        response (http/get userinfo-endpoint request)
+        userinfo (json/parse-string (:body response) true)]
+    (assoc oauth2-data :userinfo userinfo)))
+
 (defn wrap-oauth2 [client]
   (fn [req]
     (let [{:keys [oauth2 throw-exceptions]} req
