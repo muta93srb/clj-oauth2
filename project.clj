@@ -1,4 +1,4 @@
-(defproject ods/clj-oauth2 "0.5.7"
+(defproject com.telenordigital.data-insights/clj-oauth2 "0.5.7"
   :description "clj-http and ring middlewares for OAuth 2.0"
   :url "https://github.com/13o6/clj-oauth2"
   :dependencies [[org.clojure/clojure "1.7.0"]
