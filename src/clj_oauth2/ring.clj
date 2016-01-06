@@ -1,7 +1,9 @@
 (ns clj-oauth2.ring
   (:require [clj-oauth2.client :as oauth2]
             [ring.util.codec :as codec]
-            [clojure.string :as string]))
+            [ring.util.response :as ring-response]
+            [clojure.string :as string]
+            [uri.core :as uri]))
 
 ;; Random mixed case alphanumeric
 (defn- random-string [length]
@@ -45,6 +47,12 @@
     :session (merge
               (or (:session response) (:session request))
               (or (find response :oauth2) {:oauth2 oauth2-data}))))
+
+(defn clear-oauth2-data-in-session [request response]
+  (assoc response
+    :session (->
+               (or (:session response) (:session request))
+               (dissoc :oauth2))))
 
 (def store-data-in-session
   {:get-state get-state-from-session
@@ -122,40 +130,73 @@ create a vector of values."
     (and (= oauth2-uri (request-uri request oauth2-params))
          (submap? (keyify-params (parse-params oauth2-url-params encoding)) (:params request)))))
 
+(defn- logout? [uri oauth2-params]
+  "Checks if the uri is the same as the one configured as the client logout URI"
+  (= (:logout-uri-client oauth2-params) (.getPath (uri/make uri))))
+
+(defn- logout-client [request oauth2-params]
+  "Logging out the client means redirecting to the authorization server's logout URI"
+  {:status 302
+   :headers {"Location" (:logout-uri oauth2-params)}
+   :body ""})
+
+(defn- logout-callback? [uri oauth2-params]
+  "Checks if the URI is the same as the one configured as the logout callback URI"
+  (= (:logout-callback-uri oauth2-params) (.getPath (uri/make uri))))
+
+(defn oauth2-logout-callback-handler [req]
+  "Ring handler that removes the oauth2 data from the session and redirects to the / route"
+  (->> (ring-response/redirect "/")
+       (clear-oauth2-data-in-session req)))
+
 ;; This Ring wrapper acts as a filter, ensuring that the user has an OAuth
 ;; token for all but a set of explicitly excluded URLs. The response from
 ;; oauth2/get-access-token is exposed in the request via the :oauth2 key.
 ;; Requires ring.middleware.params/wrap-params and
 ;; ring.middleware.keyword-params/wrap-keyword-params to have been called
 ;; first.
+(defn handle-auth-callback [request oauth2-params]
+  (let [response {:status 302
+                  :headers {"Location" ((:get-target oauth2-params) request)}}
+        oauth2-data (oauth2/get-access-token
+                      oauth2-params
+                      (:params request)
+                      (oauth2/make-auth-request
+                        oauth2-params
+                        ((:get-state oauth2-params) request)))
+        oauth2-data-with-userinfo (oauth2/add-userinfo oauth2-data oauth2-params)]
+    ((:put-oauth2-data oauth2-params) request response oauth2-data-with-userinfo)))
+
 (defn wrap-oauth2
   [handler oauth2-params]
   (fn [request]
-    (if (excluded? (:uri request) oauth2-params)
-      (handler request)
-      (if (is-callback request oauth2-params)
-        ;; We should have an authorization code - get the access token, put
-        ;; it in the response and redirect to the originally requested URL
-        (let [response {:status 302
-                        :headers {"Location" ((:get-target oauth2-params) request)}}
-              oauth2-data (oauth2/get-access-token
-                           oauth2-params
-                           (:params request)
-                           (oauth2/make-auth-request
-                            oauth2-params
-                            ((:get-state oauth2-params) request)))
-              oauth2-data-with-userinfo (oauth2/add-userinfo oauth2-data oauth2-params)]
-          ((:put-oauth2-data oauth2-params) request response oauth2-data-with-userinfo))
-        ;; We're not handling the callback
-        (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
-          (if (nil? oauth2-data)
-            (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
-                  auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
-                  target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
-                  ;; Redirect to OAuth 2.0 authentication/authorization
-                  response {:status 302
-                            :headers {"Location" (:uri auth-req)}}]
-              ((:put-target oauth2-params)  ((:put-state oauth2-params) response xsrf-protection) target))
-            ;; We have oauth2 data - invoke the handler
-            (if-let [response (handler (assoc request :oauth2 oauth2-data))]
-              ((:put-oauth2-data oauth2-params) request response oauth2-data))))))))
+    (cond (excluded? (:uri request) oauth2-params)
+          (handler request)
+
+          ;; Redirect the client to the authorization server
+          (logout? (:uri request) oauth2-params)
+          (logout-client request oauth2-params)
+
+          ;; The authorization server redirects the client back to this URL after successful logout
+          (logout-callback? (:uri request) oauth2-params)
+          ((:logout-callback-fn oauth2-params) request)
+
+          ;; We should have an authorization code - get the access token, put
+          ;; it in the response and redirect to the originally requested URL
+          (is-callback request oauth2-params)
+          (handle-auth-callback request oauth2-params)
+
+          :else
+          ;; We're not handling the callback
+          (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
+            (if (nil? oauth2-data)
+              (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
+                    auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
+                    target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
+                    ;; Redirect to OAuth 2.0 authentication/authorization
+                    response {:status 302
+                              :headers {"Location" (:uri auth-req)}}]
+                ((:put-target oauth2-params) ((:put-state oauth2-params) response xsrf-protection) target))
+              ;; We have oauth2 data - invoke the handler
+              (if-let [response (handler (assoc request :oauth2 oauth2-data))]
+                ((:put-oauth2-data oauth2-params) request response oauth2-data)))))))
