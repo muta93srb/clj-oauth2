@@ -65,6 +65,14 @@ clj-oauth2 wraps clj-http for accessing protected resources.
    :put-target oauth2-ring/put-target-in-session
    :get-oauth2-data oauth2-ring/get-oauth2-data-from-session
    :put-oauth2-data oauth2-ring/put-oauth2-data-in-session
+   ;; Client route that will trigger a log out redirect to the Authorization server
+   :logout-uri-client "logout"
+   ;; Where to redirect the client when triggering the logout
+   :logout-uri "https://auth-server.com/logout"
+   ;; Redirected to by the Authorization server after a successful logout
+   :logout-callback-uri "oauthpostlogout"
+   ;; Hook to use to specify how to handle the logout callback
+   :logout-callback-fn r/oauth2-logout-callback-handler
    :exclude #"^/public.*"})
 
  ; This is the mapping of URL paths to actions
