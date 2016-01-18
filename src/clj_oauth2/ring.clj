@@ -180,7 +180,8 @@ create a vector of values."
   Note that this wrapper only makes sense for requests that are initiated by a user, i.e not for XHR-requests.
   Requires the wrap-oauth2 to have been called first."
   (fn [request]
-    (if (nil? (:oauth2 request))
+    (if (and (not (excluded? (:uri request) oauth2-params))
+             (nil? (:oauth2 request)))
       (redirect-to-authentication-server handler request oauth2-params)
       (handler request))))
 

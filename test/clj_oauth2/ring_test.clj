@@ -114,4 +114,19 @@
           response (wrapper-fn {:scheme "https"
                                 :uri "whatever"
                                 :oauth2 {:data "data"}})]
+      (is (= (:status response) 200))))
+  (testing "excluded url results in fall through"
+    (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
+                         :put-oauth2-data r/put-oauth2-data-in-session
+                         :get-state r/get-state-from-session
+                         :put-state r/put-state-in-session
+                         :get-target r/get-target-from-session
+                         :put-target r/put-target-in-session
+                         :redirect-uri "somewhere"
+                         :exclude #"^\/(?=ping|public).*"}
+          wrapper-fn (r/wrap-redirect-unauthenticated (fn [_] ok-response)
+                                                      oauth2-config)
+          response (wrapper-fn {:scheme "https"
+                                :uri "/ping"
+                                :session {}})]
       (is (= (:status response) 200)))))
