@@ -5,11 +5,6 @@
             [clojure.string :as string]
             [uri.core :as uri]))
 
-;; Random mixed case alphanumeric
-(defn- random-string [length]
-  (let [ascii-codes (concat (range 48 58) (range 65 91) (range 97 123))]
-    (apply str (repeatedly length #(char (rand-nth ascii-codes))))))
-
 (defn- excluded? [uri oauth2-params]
   (let [exclusion (:exclude oauth2-params)]
     (cond
@@ -42,11 +37,10 @@
   (:oauth2 (:session request)))
 
 (defn put-oauth2-data-in-session [request response oauth2-data]
-  (assoc
-      response
+  (assoc response
     :session (merge
-              (or (:session response) (:session request))
-              (or (find response :oauth2) {:oauth2 oauth2-data}))))
+               (or (:session response) (:session request))
+               (or (find response :oauth2) {:oauth2 oauth2-data}))))
 
 (defn clear-oauth2-data-in-session [request response]
   (assoc response
@@ -167,8 +161,27 @@ create a vector of values."
         oauth2-data-with-userinfo (oauth2/add-userinfo oauth2-data oauth2-params)]
     ((:put-oauth2-data oauth2-params) request response oauth2-data-with-userinfo)))
 
+(defn wrap-redirect-unauthenticated [handler oauth2-params]
+  "Redirects to the authorization server when the request is not authenticated.
+  Note that this wrapper only makes sense for requests that are initiated by a user, i.e not for XHR-requests.
+  Requires the wrap-oauth2 to have been called first."
+  (fn [request]
+    (if (nil? (:oauth2 request))
+      (oauth2/redirect-to-authentication-server handler request oauth2-params)
+      (handler request))))
+
 (defn wrap-oauth2
   [handler oauth2-params]
+  "Handles oauth2 requests for
+    - authorization redirects from the authorization server
+    - client logout
+    - logout redirects from the authorization server
+
+    Requests are delegated to the handler directly if the uri is excluded/blacklisted or when
+    the :get-oauth2-data function does not return oauth data.
+
+    If the :get-oauth2-data function returns oauth data, then it is added to the request with the :oauth2 key."
+
   (fn [request]
     (cond (excluded? (:uri request) oauth2-params)
           (handler request)
@@ -187,16 +200,9 @@ create a vector of values."
           (handle-auth-callback request oauth2-params)
 
           :else
-          ;; We're not handling the callback
           (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
             (if (nil? oauth2-data)
-              (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
-                    auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
-                    target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
-                    ;; Redirect to OAuth 2.0 authentication/authorization
-                    response {:status 302
-                              :headers {"Location" (:uri auth-req)}}]
-                ((:put-target oauth2-params) ((:put-state oauth2-params) response xsrf-protection) target))
-              ;; We have oauth2 data - invoke the handler
+              (handler request)
+              ;; We have oauth2 data - Add oauth2 to the request-map
               (if-let [response (handler (assoc request :oauth2 oauth2-data))]
                 ((:put-oauth2-data oauth2-params) request response oauth2-data)))))))
