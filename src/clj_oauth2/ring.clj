@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [uri.core :as uri]))
 
-(defn- excluded? [uri oauth2-params]
+(defn excluded? [uri oauth2-params]
   (let [exclusion (:exclude oauth2-params)]
     (cond
      (coll? exclusion)
