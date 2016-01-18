@@ -143,6 +143,20 @@ create a vector of values."
   (->> (ring-response/redirect "/")
        (clear-oauth2-data-in-session req)))
 
+(defn- random-string [length]
+  "Random mixed case alphanumeric"
+  (let [ascii-codes (concat (range 48 58) (range 65 91) (range 97 123))]
+    (apply str (repeatedly length #(char (rand-nth ascii-codes))))))
+
+(defn redirect-to-authentication-server [_ request oauth2-params]
+  "Returns a redirect to the authentication server"
+  (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
+        auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
+        target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
+        response {:status 302
+                  :headers {"Location" (:uri auth-req)}}]
+    ((:put-target oauth2-params) ((:put-state oauth2-params) response xsrf-protection) target)))
+
 ;; This Ring wrapper acts as a filter, ensuring that the user has an OAuth
 ;; token for all but a set of explicitly excluded URLs. The response from
 ;; oauth2/get-access-token is exposed in the request via the :oauth2 key.
@@ -167,7 +181,7 @@ create a vector of values."
   Requires the wrap-oauth2 to have been called first."
   (fn [request]
     (if (nil? (:oauth2 request))
-      (oauth2/redirect-to-authentication-server handler request oauth2-params)
+      (redirect-to-authentication-server handler request oauth2-params)
       (handler request))))
 
 (defn wrap-oauth2

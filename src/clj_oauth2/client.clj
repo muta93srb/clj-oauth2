@@ -9,11 +9,6 @@
   (:import [clj_oauth2 OAuth2Exception OAuth2StateMismatchException]
            [org.apache.commons.codec.binary Base64]))
 
-;; Random mixed case alphanumeric
-(defn- random-string [length]
-  (let [ascii-codes (concat (range 48 58) (range 65 91) (range 97 123))]
-    (apply str (repeatedly length #(char (rand-nth ascii-codes))))))
-
 (defn make-auth-request
   [{:keys [authorization-uri client-id redirect-uri scope access-type]}
    & [state]]
@@ -27,15 +22,6 @@
                 scope       (assoc :scope (str/join " " scope)))]
     {:uri (str (uri/make (assoc uri :query query)))
      :scope scope :state state}))
-
-(defn redirect-to-authentication-server [_ request oauth2-params]
-  "Returns a redirect to the authentication server"
-  (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
-        auth-req (make-auth-request oauth2-params xsrf-protection)
-        target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
-        response {:status 302
-                  :headers {"Location" (:uri auth-req)}}]
-    ((:put-target oauth2-params) ((:put-state oauth2-params) response xsrf-protection) target)))
 
 (defn- add-auth-header [req scheme param] ; Force.com
   (let [header (str scheme " " param)]
