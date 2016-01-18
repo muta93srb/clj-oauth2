@@ -92,7 +92,7 @@ clj-oauth2 wraps clj-http for accessing protected resources.
 
  ; Set up the wrappers
  (def app 
-    (-> handler 
+    (-> handler
         (wrap-oauth2 force-com-oauth2)
         wrap-session 
         wrap-keyword-params
@@ -102,6 +102,22 @@ clj-oauth2 wraps clj-http for accessing protected resources.
    (let [port (Integer/parseInt (get (System/getenv) "PORT" "8080"))]
         (jetty/run-jetty app {:port port})))
 ```
+
+If you want to redirect unauthenticated requests to the authorization server, you also need to add the following:
+
+```
+; Set up the wrappers
+ (def app
+    (-> handler
+        (wrap-redirect-unauthenticated force-com-oauth2)
+        (wrap-oauth2 force-com-oauth2)
+        wrap-session
+        wrap-keyword-params
+        wrap-params))
+```
+
+Note that you should not redirect API calls, e.g calls with accept header application/json. In that case you
+may want to implement your own middleware for unathenticated requests.
 
 ## Contributors
 

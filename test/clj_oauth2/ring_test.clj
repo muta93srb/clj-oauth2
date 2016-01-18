@@ -16,7 +16,7 @@
     (is (= (wrapper-fn {:uri "excluded"}) ok-response))))
 
 (deftest existing-oauth-data-are-returned-in-response
-  (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
+    (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
                        :put-oauth2-data r/put-oauth2-data-in-session
                        :redirect-uri "not-used"}
         wrapper-fn (r/wrap-oauth2 (fn [req] ok-response)
@@ -26,7 +26,7 @@
                         :session {:oauth2 {:sample-data "data!"}}})
            (merge ok-response {:session {:oauth2 {:sample-data "data!"}}})))))
 
-(deftest missing-oauth-data-results-in-redirect-to-oauth-provider
+(deftest missing-oauth-data-results-in-fall-through
   (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
                        :put-oauth2-data r/put-oauth2-data-in-session
                        :get-state r/get-state-from-session
@@ -34,13 +34,12 @@
                        :get-target r/get-target-from-session
                        :put-target r/put-target-in-session
                        :redirect-uri "somewhere"}
-        wrapper-fn (r/wrap-oauth2 (fn [_] unused-response)
+        wrapper-fn (r/wrap-oauth2 (fn [_] ok-response)
                                   oauth2-config)
         response (wrapper-fn {:scheme "https"
                               :uri "whatever"
                               :session {}})]
-    (is (= (:status response) 302))
-    (is (get-in response [:headers "Location"]))))
+    (is (= (:status response) 200))))
 
 (deftest handle-client-logout
   (testing "handle the client logout uri by redirecting to authorization server"
@@ -85,3 +84,34 @@
       (is (= (:status response) 302))
       (is (= (:session response) {:something "keep it"})))))
 
+(deftest test-wrapper-for-redirect-on-unauthenticated
+  (testing "missing oauth data results in redirect to authorization server"
+    (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
+                         :put-oauth2-data r/put-oauth2-data-in-session
+                         :get-state r/get-state-from-session
+                         :put-state r/put-state-in-session
+                         :get-target r/get-target-from-session
+                         :put-target r/put-target-in-session
+                         :redirect-uri "somewhere"}
+          wrapper-fn (r/wrap-redirect-unauthenticated (fn [_] unused-response)
+                                                             oauth2-config)
+          response (wrapper-fn {:scheme "https"
+                                :uri "whatever"
+                                :session {}})]
+      (is (= (:status response) 302))
+      (is (get-in response [:headers "Location"]))))
+
+  (testing "oauth data results in fall through"
+    (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
+                         :put-oauth2-data r/put-oauth2-data-in-session
+                         :get-state r/get-state-from-session
+                         :put-state r/put-state-in-session
+                         :get-target r/get-target-from-session
+                         :put-target r/put-target-in-session
+                         :redirect-uri "somewhere"}
+          wrapper-fn (r/wrap-redirect-unauthenticated (fn [_] ok-response)
+                                                             oauth2-config)
+          response (wrapper-fn {:scheme "https"
+                                :uri "whatever"
+                                :oauth2 {:data "data"}})]
+      (is (= (:status response) 200)))))
