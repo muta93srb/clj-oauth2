@@ -1,3 +1,7 @@
+## 0.7.0
+
+* Validate access tokens in Ring middleware
+
 ## 0.4.0
 
 * Support for refresh tokens

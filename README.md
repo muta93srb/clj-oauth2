@@ -52,12 +52,12 @@ clj-oauth2 wraps clj-http for accessing protected resources.
 (def force-com-oauth2
   {:authorization-uri (str login-uri "/services/oauth2/authorize")
    :access-token-uri (str login-uri "/services/oauth2/token")
+   :token-info-uri (str login.uri "services/oauth2/tokeninfo")
    :redirect-uri (System/getenv "REDIRECT_URI")
    :client-id (System/getenv "CLIENT_ID")
    :client-secret (System/getenv "CLIENT_SECRET")
    :scope ["id" "api" "refresh_token"]
    :grant-type "authorization_code"
-   :force-https (System/getenv "FORCE_HTTPS") ; on Heroku the app thinks it is always http
    :trace-messages (Boolean/valueOf (get (System/getenv) "DEBUG" "false"))
    :get-state oauth2-ring/get-state-from-session
    :put-state oauth2-ring/put-state-in-session

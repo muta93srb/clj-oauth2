@@ -14,12 +14,12 @@
    & [state]]
   (let [uri (uri/uri->map (uri/make authorization-uri) true)
         query (cond-> (assoc (:query uri)
-                             :client_id client-id
-                             :redirect_uri redirect-uri
-                             :response_type "code")
-                state       (assoc :state state)
-                access-type (assoc :access_type access-type)
-                scope       (assoc :scope (str/join " " scope)))]
+                        :client_id client-id
+                        :redirect_uri redirect-uri
+                        :response_type "code")
+                      state (assoc :state state)
+                      access-type (assoc :access_type access-type)
+                      scope (assoc :scope (str/join " " scope)))]
     {:uri (str (uri/make (assoc uri :query query)))
      :scope scope :state state}))
 
@@ -62,7 +62,7 @@
              (or (.startsWith content-type "application/json")
                  (.startsWith content-type "text/javascript"))) ; Facebookism
       (json/parse-string body true)
-      (uri/form-url-decode body)))) ;; Facebookism
+      (uri/form-url-decode body)))) ; Facebookism
 
 (defn- request-access-token
   [endpoint params]
@@ -73,7 +73,6 @@
                     (prepare-access-token-request endpoint params)
                     (add-client-authentication endpoint)
                     (update :body uri/form-url-encode))
-        
         {:keys [status body] :as response} (http/post access-token-uri request)
         {error :error :as body} (decode-response response)]
     (if (or error (not= status 200))
@@ -100,10 +99,10 @@
           (throw (OAuth2Exception. (:error_description params) error))
           (and expected-state (not= state expected-state))
           (throw (OAuth2StateMismatchException.
-                  (format "Expected state %s but got %s"
-                          state expected-state)
-                  state
-                  expected-state))
+                   (format "Expected state %s but got %s"
+                           state expected-state)
+                   state
+                   expected-state))
           :else
           (request-access-token endpoint params))))
 
@@ -111,6 +110,12 @@
   (str (uri/make (assoc-in (uri/uri->map (uri/make uri) true)
                            [:query query-param]
                            access-token))))
+
+(defn valid-auth-token? [url access-token]
+  "Validated the auth token against the validation URL"
+  (let [req (http/get url {:query-params {"access_token" access-token}
+                           :throw-exceptions false})]
+    (= (:status req) 200)))
 
 (defmulti add-access-token-to-request
   (fn [req oauth2]
@@ -145,12 +150,11 @@
   [request oauth2]
   ((make-handler "token") request oauth2))
 
-
 (defn add-userinfo [oauth2-data oauth2-params]
   (let [accesstoken (:access-token oauth2-data)
         userinfo-endpoint (:user-info-uri oauth2-params)
-        request {:headers          {"Authorization" (str "Bearer " accesstoken)}
-                 :content-type     "application/json"
+        request {:headers {"Authorization" (str "Bearer " accesstoken)}
+                 :content-type "application/json"
                  :throw-exceptions false}
         response (http/get userinfo-endpoint request)
         userinfo (json/parse-string (:body response) true)]
@@ -168,14 +172,15 @@
           (client req))))))
 
 (defn refresh-access-token
-  [refresh-token {:keys [client-id client-secret access-token-uri]}]
-  (let [req (http/post access-token-uri {:form-params
-                                         {:client_id client-id
-                                          :client_secret client-secret
-                                          :refresh_token refresh-token
-                                          :grant_type "refresh_token"}})]
-    (when (= (:status req) 200)
-      (json/parse-string (:body req) true))))
+  [refresh-token oauth2-params]
+  (let [request (-> {:content-type "application/x-www-form-urlencoded"
+                     :throw-exceptions false
+                     :form-params
+                     {:refresh_token refresh-token
+                      :grant_type "refresh_token"}}
+                    (add-client-authentication oauth2-params))
+        response (http/post (:access-token-uri oauth2-params) request)]
+    [(= (:status response) 200) (json/parse-string (:body response) true)]))
 
 (def request
   (wrap-oauth2 http/request))
