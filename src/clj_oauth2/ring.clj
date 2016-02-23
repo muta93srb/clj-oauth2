@@ -1,21 +1,22 @@
 (ns clj-oauth2.ring
   (:require [clj-oauth2.client :as oauth2]
+            [cheshire.core :as json]
             [ring.util.codec :as codec]
             [ring.util.response :as ring-response]
             [clojure.string :as string]
             [uri.core :as uri]))
 
-(defn excluded? [uri oauth2-params]
-  (let [exclusion (:exclude oauth2-params)]
+(defn excluded? [request exclusion]
+  (let [uri (:uri request)]
     (cond
-     (coll? exclusion)
-     (some = exclusion uri)
-     (string? exclusion)
-     (= exclusion uri)
-     (fn? exclusion)
-     (exclusion uri)
-     (instance? java.util.regex.Pattern exclusion)
-     (re-matches exclusion uri))))
+      (coll? exclusion)
+      (some = exclusion uri)
+      (string? exclusion)
+      (= exclusion uri)
+      (fn? exclusion)
+      (exclusion uri)
+      (instance? java.util.regex.Pattern exclusion)
+      (re-matches exclusion uri))))
 
 ;; Functions to store state, target URL, OAuth2 data in session
 ;; requires ring.middleware.session/wrap-session
@@ -56,15 +57,6 @@
    :get-oauth2-data get-oauth2-data-from-session
    :put-oauth2-data put-oauth2-data-in-session})
 
-(defn request-uri [request oauth2-params]
-  (let [scheme (if (:force-https oauth2-params) "https" (name (:scheme request)))
-        port (if (or (and (= (name (:scheme request)) "http")
-                          (not= (:server-port request) 80))
-                     (and (= (name (:scheme request)) "https")
-                          (not= (:server-port request) 443)))
-               (str ":" (:server-port request)))]
-    (str scheme "://" (:server-name request) port (:uri request))))
-
 ;; Parameter handling code shamelessly plundered from ring.middleware.
 ;; Thanks, Mark!
 (defn- keyword-syntax? [s]
@@ -72,84 +64,72 @@
 
 (defn- keyify-params [target]
   (cond
-   (map? target)
-   (into {}
-         (for [[k v] target]
-           [(if (and (string? k) (keyword-syntax? k))
-              (keyword k)
-              k)
-            (keyify-params v)]))
-   (vector? target)
-   (vec (map keyify-params target))
-   :else
-   target))
+    (map? target)
+    (into {}
+          (for [[k v] target]
+            [(if (and (string? k) (keyword-syntax? k))
+               (keyword k)
+               k)
+             (keyify-params v)]))
+    (vector? target)
+    (vec (map keyify-params target))
+    :else
+    target))
 
 (defn- assoc-param
   "Associate a key with a value. If the key already exists in the map,
 create a vector of values."
   [map key val]
   (assoc map key
-         (if-let [cur (map key)]
-           (if (vector? cur)
-             (conj cur val)
-             [cur val])
-           val)))
+             (if-let [cur (map key)]
+               (if (vector? cur)
+                 (conj cur val)
+                 [cur val])
+               val)))
 
 (defn- parse-params
   "Parse parameters from a string into a map."
   [^String param-string encoding]
   (reduce
-   (fn [param-map encoded-param]
-     (if-let [[_ key val] (re-matches #"([^=]+)=(.*)" encoded-param)]
-       (assoc-param param-map
-                    (codec/url-decode key encoding)
-                    (codec/url-decode (or val "") encoding))
-       param-map))
-   {}
-   (string/split param-string #"&")))
+    (fn [param-map encoded-param]
+      (if-let [[_ key val] (re-matches #"([^=]+)=(.*)" encoded-param)]
+        (assoc-param param-map
+                     (codec/url-decode key encoding)
+                     (codec/url-decode (or val "") encoding))
+        param-map))
+    {}
+    (string/split param-string #"&")))
 
-(defn- submap? [map1 map2]
+(defn- submap?
   "Are all the key/value pairs in map1 also in map2?"
+  [map1 map2]
   (every?
-   (fn [item]
-     (= item (find map2 (key item))))
-   map1))
+    (fn [item]
+      (= item (find map2 (key item))))
+    map1))
 
-(defn is-callback [request oauth2-params]
-  "Returns true if this is a request to the callback URL"
-  (let [oauth2-url-vector (string/split (.toString (java.net.URI. (:redirect-uri oauth2-params))) #"\?")
-        oauth2-uri (nth oauth2-url-vector 0)
-        oauth2-url-params (nth oauth2-url-vector 1 "")
-        encoding (or (:character-encoding request) "UTF-8")]
-    (and (= oauth2-uri (request-uri request oauth2-params))
-         (submap? (keyify-params (parse-params oauth2-url-params encoding)) (:params request)))))
-
-(defn- logout? [uri oauth2-params]
-  "Checks if the uri is the same as the one configured as the client logout URI"
-  (= (:logout-uri-client oauth2-params) (.getPath (uri/make uri))))
-
-(defn- logout-client [request oauth2-params]
+(defn- logout-client
   "Logging out the client means redirecting to the authorization server's logout URI"
+  [logout-uri]
   {:status 302
-   :headers {"Location" (:logout-uri oauth2-params)}
+   :headers {"Location" logout-uri}
    :body ""})
 
-(defn- logout-callback? [uri oauth2-params]
-  "Checks if the URI is the same as the one configured as the logout callback URI"
-  (= (:logout-callback-uri oauth2-params) (.getPath (uri/make uri))))
-
-(defn oauth2-logout-callback-handler [req]
+(defn oauth2-logout-callback-handler
   "Ring handler that removes the oauth2 data from the session and redirects to the / route"
+  [req]
   (->> (ring-response/redirect "/")
        (clear-oauth2-data-in-session req)))
 
-(defn- random-string [length]
+(defn- random-string
   "Random mixed case alphanumeric"
+  [length]
   (let [ascii-codes (concat (range 48 58) (range 65 91) (range 97 123))]
     (apply str (repeatedly length #(char (rand-nth ascii-codes))))))
 
-(defn redirect-to-authentication-server [_ request oauth2-params]
+(defn redirect-to-authentication-server
   "Returns a redirect to the authentication server"
+  [request oauth2-params]
   (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
         auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
         target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
@@ -157,13 +137,14 @@ create a vector of values."
                   :headers {"Location" (:uri auth-req)}}]
     ((:put-target oauth2-params) ((:put-state oauth2-params) response xsrf-protection) target)))
 
-;; This Ring wrapper acts as a filter, ensuring that the user has an OAuth
-;; token for all but a set of explicitly excluded URLs. The response from
-;; oauth2/get-access-token is exposed in the request via the :oauth2 key.
-;; Requires ring.middleware.params/wrap-params and
-;; ring.middleware.keyword-params/wrap-keyword-params to have been called
-;; first.
-(defn handle-auth-callback [request oauth2-params]
+(defn handle-authenticated-callback
+  "This Ring wrapper acts as a filter, ensuring that the user has an OAuth
+  token for all but a set of explicitly excluded URLs. The response from
+  oauth2/get-access-token is exposed in the request via the :oauth2 key.
+  Requires ring.middleware.params/wrap-params and
+  ring.middleware.keyword-params/wrap-keyword-params to have been called
+  first."
+  [request oauth2-params]
   (let [response {:status 302
                   :headers {"Location" ((:get-target oauth2-params) request)}}
         oauth2-data (oauth2/get-access-token
@@ -175,49 +156,135 @@ create a vector of values."
         oauth2-data-with-userinfo (oauth2/add-userinfo oauth2-data oauth2-params)]
     ((:put-oauth2-data oauth2-params) request response oauth2-data-with-userinfo)))
 
-(defn wrap-redirect-unauthenticated [handler oauth2-params]
+(defn wrap-redirect-unauthenticated
   "Redirects to the authorization server when the request is not authenticated.
   Note that this wrapper only makes sense for requests that are initiated by a user, i.e not for XHR-requests.
   Requires the wrap-oauth2 to have been called first."
+  [handler oauth2-params]
   (fn [request]
-    (if (and (not (excluded? (:uri request) oauth2-params))
+    (if (and (not (excluded? request (:exclude oauth2-params)))
              (nil? (:oauth2 request)))
-      (redirect-to-authentication-server handler request oauth2-params)
+      (redirect-to-authentication-server request oauth2-params)
       (handler request))))
 
-(defn wrap-oauth2
+(defn authenticated-callback?
+  "Checks if the request uri matches the configured authenticated callback uri"
+  [request oauth2-params]
+  (= (:uri request) (.getPath (uri/make (:redirect-uri oauth2-params)))))
+
+(defn wrap-authenticated-callback
+  "Handles authentication callbacks from the authorization server"
   [handler oauth2-params]
+  (fn [request]
+    (if (authenticated-callback? request oauth2-params)
+      (handle-authenticated-callback request oauth2-params)
+      (handler request))))
+
+(defn wrap-logout
+  "Logs the client out of the authorization server session if the request is to the local logout URI"
+  [handler {:keys [logout-client-path logout-uri]}]
+  (fn [request]
+    (if (= (:uri request) logout-client-path)
+      (logout-client logout-uri)
+      (handler request))))
+
+(defn wrap-logout-callback
+  "Handles logout callbacks from the authorization server to log the user out of the local session as well"
+  [handler {:keys [logout-callback-fn logout-callback-path]}]
+  (fn [request]
+    (if (= (:uri request) logout-callback-path)
+      (logout-callback-fn request)
+      (handler request))))
+
+(defn update-oauth2-data [request oauth2-data]
+  (update request :oauth2 (fn [old]
+                            (-> old
+                                (assoc :access-token (:access_token oauth2-data))
+                                (assoc :refresh-token (:refresh_token oauth2-data))
+                                (assoc :params (dissoc oauth2-data :access_token :token_type))))))
+
+(defn accept-html? [request]
+  (let [accept-header (get-in request [:headers "accept"] "")]
+    (re-find (re-pattern "text/html") accept-header)))
+
+(defn refresh-token-error []
+  {:status 400
+   :headers {"Content-Type" "application/json; charset=utf-8"}
+   :body (json/generate-string {:error "Refresh token failed"
+                                :errorcode "refresh-token-failed"})})
+
+(defn failed-refresh-response
+  "Returned when refreshing the tokens fails. Dependning on the accept header, either redirect the user to
+  login again with the authentication server or return a 400 error"
+  [request oauth2-params]
+  (if (accept-html? request)
+    (redirect-to-authentication-server request oauth2-params)
+    (refresh-token-error)))
+
+(defn- refresh-oauth-data
+  "Attempts to refresh an access token using a refresh token.
+  If the refresh fails an error is returned indicating the refresh failed"
+  [handler request oauth2-params]
+  (let [[success? oauth2-update] (oauth2/refresh-access-token (:refresh-token (:oauth2 request)) oauth2-params)]
+    (if success?
+      (let [refreshed (update-oauth2-data request oauth2-update)
+            response (handler refreshed)]
+        (assoc response :oauth2 (:oauth2 refreshed)))
+      (failed-refresh-response request oauth2-params))))
+
+(defn wrap-validate-oauth-data
+  "Validates the request according to the Oauth contract
+
+  Note:
+  - requests to excluded URIs are skipped
+  - only requests with oauth2-data are validated
+
+  Validation implies the following:
+  - Checking the validity of the access token against the authorization server API
+  - Attempting to refresh the access token in the case it has expired"
+  [handler oauth2-params]
+  (fn [request]
+    (cond (excluded? request (:exclude oauth2-params))
+          (handler request)
+
+          (not (:oauth2 request))
+          (handler request)
+
+          (oauth2/valid-auth-token? (:token-validation-uri oauth2-params) (:access-token (:oauth2 request)))
+          (handler request)
+
+          :else
+          (refresh-oauth-data handler request oauth2-params))))
+
+(defn wrap-add-oauth-data
+  "Adds :oauth2 key to the request"
+  [handler oauth2-params]
+  (fn [request]
+    (if (excluded? request (:exclude oauth2-params))
+      (handler request)
+      (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
+        (if (nil? oauth2-data)
+          (handler request)
+          ;; Add oauth2 data to request and response
+          (if-let [response (handler (assoc request :oauth2 oauth2-data))]
+            ((:put-oauth2-data oauth2-params) request response oauth2-data)))))))
+
+(defn wrap-oauth2
   "Handles oauth2 requests for
     - authorization redirects from the authorization server
     - client logout
     - logout redirects from the authorization server
+    - validating access tokens against the authorization server on every request
+    - refreshing access tokens that expire
 
     Requests are delegated to the handler directly if the uri is excluded/blacklisted or when
     the :get-oauth2-data function does not return oauth data.
 
-    If the :get-oauth2-data function returns oauth data, then it is added to the request with the :oauth2 key."
-
-  (fn [request]
-    (cond (excluded? (:uri request) oauth2-params)
-          (handler request)
-
-          ;; Redirect the client to the authorization server
-          (logout? (:uri request) oauth2-params)
-          (logout-client request oauth2-params)
-
-          ;; The authorization server redirects the client back to this URL after successful logout
-          (logout-callback? (:uri request) oauth2-params)
-          ((:logout-callback-fn oauth2-params) request)
-
-          ;; We should have an authorization code - get the access token, put
-          ;; it in the response and redirect to the originally requested URL
-          (is-callback request oauth2-params)
-          (handle-auth-callback request oauth2-params)
-
-          :else
-          (let [oauth2-data ((:get-oauth2-data oauth2-params) request)]
-            (if (nil? oauth2-data)
-              (handler request)
-              ;; We have oauth2 data - Add oauth2 to the request-map
-              (if-let [response (handler (assoc request :oauth2 oauth2-data))]
-                ((:put-oauth2-data oauth2-params) request response oauth2-data)))))))
+    If there is oauth data, then it is added to the request/response with the :oauth2 key"
+  [handler oauth2-params]
+  (-> handler
+      (wrap-validate-oauth-data oauth2-params)
+      (wrap-add-oauth-data oauth2-params)
+      (wrap-authenticated-callback oauth2-params)
+      (wrap-logout-callback oauth2-params)
+      (wrap-logout oauth2-params)))

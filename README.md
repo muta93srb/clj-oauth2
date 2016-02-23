@@ -52,13 +52,12 @@ clj-oauth2 wraps clj-http for accessing protected resources.
 (def force-com-oauth2
   {:authorization-uri (str login-uri "/services/oauth2/authorize")
    :access-token-uri (str login-uri "/services/oauth2/token")
+   :token-validation-uri (str login.uri "services/oauth2/tokeninfo")
    :redirect-uri (System/getenv "REDIRECT_URI")
    :client-id (System/getenv "CLIENT_ID")
    :client-secret (System/getenv "CLIENT_SECRET")
    :scope ["id" "api" "refresh_token"]
    :grant-type "authorization_code"
-   :force-https (System/getenv "FORCE_HTTPS") ; on Heroku the app thinks it is always http
-   :trace-messages (Boolean/valueOf (get (System/getenv) "DEBUG" "false"))
    :get-state oauth2-ring/get-state-from-session
    :put-state oauth2-ring/put-state-in-session
    :get-target oauth2-ring/get-target-from-session
@@ -66,11 +65,11 @@ clj-oauth2 wraps clj-http for accessing protected resources.
    :get-oauth2-data oauth2-ring/get-oauth2-data-from-session
    :put-oauth2-data oauth2-ring/put-oauth2-data-in-session
    ;; Client route that will trigger a log out redirect to the Authorization server
-   :logout-uri-client "logout"
+   :logout-client-path "logout"
    ;; Where to redirect the client when triggering the logout
    :logout-uri "https://auth-server.com/logout"
    ;; Redirected to by the Authorization server after a successful logout
-   :logout-callback-uri "oauthpostlogout"
+   :logout-callback-path "oauthpostlogout"
    ;; Hook to use to specify how to handle the logout callback
    :logout-callback-fn r/oauth2-logout-callback-handler
    :exclude #"^/public.*"})
@@ -118,6 +117,23 @@ If you want to redirect unauthenticated requests to the authorization server, yo
 
 Note that you should not redirect API calls, e.g calls with accept header application/json. In that case you
 may want to implement your own middleware for unathenticated requests.
+
+If you do not want to validate every access token on every request or validate them differently, you can use your
+own version of the wrap-oauth function.
+
+Example:
+```
+(defn my-custom-wrap-oauth2
+  [handler oauth2-params]
+  (-> handler
+      ;; Your own validation wrapper
+      (my-own-validate-oauth-data)
+      (wrap-add-oauth-data oauth2-params)
+      (wrap-authenticated-callback oauth2-params)
+      (wrap-logout-callback oauth2-params)
+      (wrap-logout oauth2-params)))
+```
+
 
 ## Contributors
 
