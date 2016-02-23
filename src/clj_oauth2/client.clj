@@ -111,8 +111,9 @@
                            [:query query-param]
                            access-token))))
 
-(defn valid-auth-token? [url access-token]
+(defn valid-auth-token?
   "Validated the auth token against the validation URL"
+  [url access-token]
   (let [req (http/get url {:query-params {"access_token" access-token}
                            :throw-exceptions false})]
     (= (:status req) 200)))

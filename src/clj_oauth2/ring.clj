@@ -100,8 +100,9 @@ create a vector of values."
     {}
     (string/split param-string #"&")))
 
-(defn- submap? [map1 map2]
+(defn- submap?
   "Are all the key/value pairs in map1 also in map2?"
+  [map1 map2]
   (every?
     (fn [item]
       (= item (find map2 (key item))))
@@ -114,18 +115,21 @@ create a vector of values."
    :headers {"Location" logout-uri}
    :body ""})
 
-(defn oauth2-logout-callback-handler [req]
+(defn oauth2-logout-callback-handler
   "Ring handler that removes the oauth2 data from the session and redirects to the / route"
+  [req]
   (->> (ring-response/redirect "/")
        (clear-oauth2-data-in-session req)))
 
-(defn- random-string [length]
+(defn- random-string
   "Random mixed case alphanumeric"
+  [length]
   (let [ascii-codes (concat (range 48 58) (range 65 91) (range 97 123))]
     (apply str (repeatedly length #(char (rand-nth ascii-codes))))))
 
-(defn redirect-to-authentication-server [request oauth2-params]
+(defn redirect-to-authentication-server
   "Returns a redirect to the authentication server"
+  [request oauth2-params]
   (let [xsrf-protection (or ((:get-state oauth2-params) request) (random-string 20))
         auth-req (oauth2/make-auth-request oauth2-params xsrf-protection)
         target (str (:uri request) (if (:query-string request) (str "?" (:query-string request))))
@@ -266,7 +270,6 @@ create a vector of values."
             ((:put-oauth2-data oauth2-params) request response oauth2-data)))))))
 
 (defn wrap-oauth2
-  [handler oauth2-params]
   "Handles oauth2 requests for
     - authorization redirects from the authorization server
     - client logout
@@ -278,6 +281,7 @@ create a vector of values."
     the :get-oauth2-data function does not return oauth data.
 
     If there is oauth data, then it is added to the request/response with the :oauth2 key"
+  [handler oauth2-params]
   (-> handler
       (wrap-validate-oauth-data oauth2-params)
       (wrap-add-oauth-data oauth2-params)
