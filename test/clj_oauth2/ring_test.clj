@@ -26,7 +26,7 @@
   (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
                        :put-oauth2-data r/put-oauth2-data-in-session
                        :redirect-uri "not-used"
-                       :token-info-uri (str stub/server-uri "/tokeninfo")}
+                       :token-validation-uri (str stub/server-uri "/tokeninfo")}
         wrapper-fn (r/wrap-oauth2 (fn [req] ok-response)
                                   oauth2-config)]
     (is (= (wrapper-fn {:scheme "https"
@@ -38,7 +38,7 @@
   (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
                        :put-oauth2-data r/put-oauth2-data-in-session
                        :redirect-uri "not-used"
-                       :token-info-uri (str stub/server-uri "/tokeninfo")
+                       :token-validation-uri (str stub/server-uri "/tokeninfo")
                        :access-token-uri (str stub/server-uri "/token-refresh")}
         wrapper-fn (r/wrap-oauth2 (fn [req] ok-response)
                                   oauth2-config)
@@ -62,7 +62,7 @@
                          :get-target r/get-target-from-session
                          :put-target r/put-target-in-session
                          :redirect-uri "somewhere"
-                         :token-info-uri (str stub/server-uri "/tokeninfo")
+                         :token-validation-uri (str stub/server-uri "/tokeninfo")
                          :access-token-uri (str stub/server-uri "/token-refresh-always-fails")}
           wrapper-fn (r/wrap-oauth2 (fn [req] ok-response)
                                     oauth2-config)
@@ -77,7 +77,7 @@
     (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session
                          :put-oauth2-data r/put-oauth2-data-in-session
                          :redirect-uri "not-used"
-                         :token-info-uri (str stub/server-uri "/tokeninfo")
+                         :token-validation-uri (str stub/server-uri "/tokeninfo")
                          :access-token-uri (str stub/server-uri "/token-refresh-always-fails")}
           wrapper-fn (r/wrap-oauth2 (fn [req] ok-response)
                                     oauth2-config)
@@ -114,8 +114,8 @@
                          :put-target r/put-target-in-session
                          :redirect-uri "not-used"
                          :logout-uri "https://auth-server.com/logout"
-                         :logout-uri-client "logout"
-                         :logout-callback-uri "not-used-in-test"}
+                         :logout-client-path "logout"
+                         :logout-callback-path "not-used-in-test"}
           wrapper-fn (r/wrap-oauth2 (fn [req] unused-response)
                                     oauth2-config)
           response (wrapper-fn {:scheme "https"
@@ -134,8 +134,8 @@
                          :put-target r/put-target-in-session
                          :redirect-uri "not-used"
                          :logout-uri "https://auth-server.com/logout"
-                         :logout-uri-client "logout"
-                         :logout-callback-uri "oauthpostlogout"
+                         :logout-client-path "logout"
+                         :logout-callback-path "oauthpostlogout"
                          :logout-callback-fn r/oauth2-logout-callback-handler}
           wrapper-fn (r/wrap-oauth2 (fn [req] unused-response)
                                     oauth2-config)

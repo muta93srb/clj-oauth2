@@ -52,7 +52,7 @@ clj-oauth2 wraps clj-http for accessing protected resources.
 (def force-com-oauth2
   {:authorization-uri (str login-uri "/services/oauth2/authorize")
    :access-token-uri (str login-uri "/services/oauth2/token")
-   :token-info-uri (str login.uri "services/oauth2/tokeninfo")
+   :token-validation-uri (str login.uri "services/oauth2/tokeninfo")
    :redirect-uri (System/getenv "REDIRECT_URI")
    :client-id (System/getenv "CLIENT_ID")
    :client-secret (System/getenv "CLIENT_SECRET")
@@ -66,11 +66,11 @@ clj-oauth2 wraps clj-http for accessing protected resources.
    :get-oauth2-data oauth2-ring/get-oauth2-data-from-session
    :put-oauth2-data oauth2-ring/put-oauth2-data-in-session
    ;; Client route that will trigger a log out redirect to the Authorization server
-   :logout-uri-client "logout"
+   :logout-client-path "logout"
    ;; Where to redirect the client when triggering the logout
    :logout-uri "https://auth-server.com/logout"
    ;; Redirected to by the Authorization server after a successful logout
-   :logout-callback-uri "oauthpostlogout"
+   :logout-callback-path "oauthpostlogout"
    ;; Hook to use to specify how to handle the logout callback
    :logout-callback-fn r/oauth2-logout-callback-handler
    :exclude #"^/public.*"})

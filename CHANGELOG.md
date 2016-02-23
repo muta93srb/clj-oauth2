@@ -1,6 +1,8 @@
 ## 0.7.0
 
 * Validate access tokens in Ring middleware
+* Renamed :logout-callback-uri to :logout-callback-path
+* Renamed :logout-uri-client to :logout-client-path
 
 ## 0.4.0
 

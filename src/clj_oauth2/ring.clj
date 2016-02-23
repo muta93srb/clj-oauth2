@@ -114,10 +114,6 @@ create a vector of values."
    :headers {"Location" logout-uri}
    :body ""})
 
-(defn- logout-callback? [request logout-callback-uri]
-  "Checks if the URI is the same as the one configured as the logout callback URI"
-  (= (:uri request) logout-callback-uri))
-
 (defn oauth2-logout-callback-handler [req]
   "Ring handler that removes the oauth2 data from the session and redirects to the / route"
   (->> (ring-response/redirect "/")
@@ -182,17 +178,17 @@ create a vector of values."
 
 (defn wrap-logout
   "Logs the client out of the authorization server session if the request is to the local logout URI"
-  [handler {:keys [logout-uri-client logout-uri]}]
+  [handler {:keys [logout-client-path logout-uri]}]
   (fn [request]
-    (if (= (:uri request) logout-uri-client)
+    (if (= (:uri request) logout-client-path)
       (logout-client logout-uri)
       (handler request))))
 
 (defn wrap-logout-callback
   "Handles logout callbacks from the authorization server to log the user out of the local session as well"
-  [handler {:keys [logout-callback-fn logout-callback-uri]}]
+  [handler {:keys [logout-callback-fn logout-callback-path]}]
   (fn [request]
-    (if (logout-callback? request logout-callback-uri)
+    (if (= (:uri request) logout-callback-path)
       (logout-callback-fn request)
       (handler request))))
 
@@ -250,7 +246,7 @@ create a vector of values."
           (not (:oauth2 request))
           (handler request)
 
-          (oauth2/valid-auth-token? (:token-info-uri oauth2-params) (:access-token (:oauth2 request)))
+          (oauth2/valid-auth-token? (:token-validation-uri oauth2-params) (:access-token (:oauth2 request)))
           (handler request)
 
           :else
