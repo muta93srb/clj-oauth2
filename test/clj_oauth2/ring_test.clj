@@ -87,7 +87,9 @@
                                 :session {:oauth2 {:access-token stub/access-token-invalid}}})]
       (is (= (:status response) 400))
       (is (= (:headers response) {"Content-Type" "application/json; charset=utf-8"}))
-      (is (= (:body response) "{\"error\":\"Refresh token failed\",\"errorcode\":\"refresh-token-failed\"}")))))
+      (is (= (:body response) "{\"error\":\"Refresh token failed\",\"errorcode\":\"refresh-token-failed\"}"))
+      ;; We don't want the cookie to be updated on failures, hence the session must be blank
+      (is (not (:session response))))))
 
 (deftest missing-oauth-data-results-in-fall-through
   (let [oauth2-config {:get-oauth2-data r/get-oauth2-data-from-session

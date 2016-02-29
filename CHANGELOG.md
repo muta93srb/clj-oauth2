@@ -1,3 +1,7 @@
+## 0.7.1
+
+* Do not update session when refresh token fails
+
 ## 0.7.0
 
 * Validate access tokens in Ring middleware
