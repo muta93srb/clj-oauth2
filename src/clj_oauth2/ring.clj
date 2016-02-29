@@ -37,11 +37,18 @@
 (defn get-oauth2-data-from-session [request]
   (:oauth2 (:session request)))
 
-(defn put-oauth2-data-in-session [request response oauth2-data]
-  (assoc response
-    :session (merge
-               (or (:session response) (:session request))
-               (or (find response :oauth2) {:oauth2 oauth2-data}))))
+(defn put-oauth2-data-in-session
+  "Put the oauth2 data in the :session key, either from the response or the request.
+
+  Note that if there was a failure to refresh the access token, then the :session is not set in the response.
+  The reason for that is to avoid updating the session with expired tokens."
+  [request response oauth2-data]
+  (if (= (:oauth2-error response) :failed-to-refresh-token)
+    response
+    (assoc response
+      :session (merge
+                 (or (:session response) (:session request))
+                 (or (find response :oauth2) {:oauth2 oauth2-data})))))
 
 (defn clear-oauth2-data-in-session [request response]
   (assoc response
@@ -208,7 +215,8 @@ create a vector of values."
     (re-find (re-pattern "text/html") accept-header)))
 
 (defn refresh-token-error []
-  {:status 400
+  {:oauth2-error :failed-to-refresh-token
+   :status 400
    :headers {"Content-Type" "application/json; charset=utf-8"}
    :body (json/generate-string {:error "Refresh token failed"
                                 :errorcode "refresh-token-failed"})})
