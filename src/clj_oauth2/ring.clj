@@ -123,10 +123,12 @@ create a vector of values."
    :body ""})
 
 (defn oauth2-logout-callback-handler
-  "Ring handler that removes the oauth2 data from the session and redirects to the / route"
-  [req]
-  (->> (ring-response/redirect "/")
-       (clear-oauth2-data-in-session req)))
+  "Ring handler that removes the oauth2 data from the session and redirects to the specified route, or to / if
+   no redirect-url specified."
+  ([req] (oauth2-logout-callback-handler req "/"))
+  ([req redirect-url]
+   (->> (ring-response/redirect redirect-url)
+        (clear-oauth2-data-in-session req))))
 
 (defn- random-string
   "Random mixed case alphanumeric"
