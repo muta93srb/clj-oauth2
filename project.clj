@@ -7,6 +7,8 @@
                  [uri "1.1.0"]
                  [commons-codec/commons-codec "1.6"]
                  [ring "1.4.0"]]
-  :plugins [[com.jakemccrary/lein-test-refresh "0.12.0"]]
+  :codox {:output-path "docs"}
+  :plugins [[com.jakemccrary/lein-test-refresh "0.12.0"]
+            [lein-codox "0.10.2"]]
   :aot [clj-oauth2.OAuth2Exception
         clj-oauth2.OAuth2StateMismatchException])
