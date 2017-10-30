@@ -29,7 +29,7 @@
   (assoc response :session (merge (response :session) {:state state})))
 
 (defn get-target-from-session [request]
-  (:target (:session request)))
+  (or (:target (:session request)) "/"))
 
 (defn put-target-in-session [response target]
   (assoc response :session (merge (response :session) {:target target})))
