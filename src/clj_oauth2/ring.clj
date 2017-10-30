@@ -298,3 +298,5 @@ create a vector of values."
       (wrap-authenticated-callback oauth2-params)
       (wrap-logout-callback oauth2-params)
       (wrap-logout oauth2-params)))
+
+(prefer-method print-method clojure.lang.IDeref java.lang.Throwable)
