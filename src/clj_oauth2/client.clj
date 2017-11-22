@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [get])
   (:require [clj-http.client :as http]
             [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [uri.core :as uri]
             [ring.util.response :as resp]
             [clj-http.client :refer [wrap-request]]
@@ -114,9 +115,11 @@
 (defn valid-auth-token?
   "Validated the auth token against the validation URL"
   [url access-token]
-  (let [req (http/get url {:query-params {"access_token" access-token}
+  (log/debug "Validating access token" url access-token)
+  (let [res (http/get url {:query-params {"access_token" access-token}
                            :throw-exceptions false})]
-    (= (:status req) 200)))
+    (log/debug "Access token validation response" url access-token res)
+    (= (:status res) 200)))
 
 (defmulti add-access-token-to-request
   (fn [req oauth2]

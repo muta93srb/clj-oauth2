@@ -1,7 +1,8 @@
-(defproject com.telenordigital.data-insights/clj-oauth2 "0.7.4"
+(defproject com.telenordigital.data-insights/clj-oauth2 "0.7.5-SNAPSHOT"
   :description "clj-http and ring middlewares for OAuth 2.0"
   :url "https://github.com/comoyo/clj-oauth2"
   :dependencies [[org.clojure/clojure "1.7.0"]
+                 [org.clojure/tools.logging "0.4.0"]
                  [cheshire "5.5.0"]
                  [clj-http "1.1.0"]
                  [uri "1.1.0"]

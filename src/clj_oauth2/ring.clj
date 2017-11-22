@@ -1,5 +1,6 @@
 (ns clj-oauth2.ring
   (:require [clj-oauth2.client :as oauth2]
+            [clojure.tools.logging :as log]
             [cheshire.core :as json]
             [ring.util.codec :as codec]
             [ring.util.response :as ring-response]
@@ -45,10 +46,12 @@
   [request response oauth2-data]
   (if (= (:oauth2-error response) :failed-to-refresh-token)
     response
-    (assoc response
-      :session (merge
-                 (or (:session response) (:session request))
-                 (or (find response :oauth2) {:oauth2 oauth2-data})))))
+    (let [res (assoc response
+                :session (merge
+                           (or (:session response) (:session request))
+                           (or (find response :oauth2) {:oauth2 oauth2-data})))]
+      (log/debug "Putting oauth2 data in session." (:session res))
+      res)))
 
 (defn clear-oauth2-data-in-session [request response]
   (assoc response
@@ -227,6 +230,7 @@ create a vector of values."
   "Returned when refreshing the tokens fails. Dependning on the accept header, either redirect the user to
   login again with the authentication server or return a 400 error"
   [request oauth2-params]
+  (log/debug "Token refreshing failed")
   (if (accept-html? request)
     (redirect-to-authentication-server request oauth2-params)
     (refresh-token-error)))
@@ -235,10 +239,13 @@ create a vector of values."
   "Attempts to refresh an access token using a refresh token.
   If the refresh fails an error is returned indicating the refresh failed"
   [handler request oauth2-params]
+  (log/debug "Refreshing access token. Oauth2 data: " (:oauth2 request))
   (let [[success? oauth2-update] (oauth2/refresh-access-token (:refresh-token (:oauth2 request)) oauth2-params)]
     (if success?
-      (let [refreshed (update-oauth2-data request oauth2-update)
+      (let [_ (log/debug "Successfuly refreshed token" oauth2-update)
+            refreshed (update-oauth2-data request oauth2-update)
             response (handler refreshed)]
+        (log/debug "Associng oauth2 data into the response" (:oauth2 refreshed))
         (assoc response :oauth2 (:oauth2 refreshed)))
       (failed-refresh-response request oauth2-params))))
 
@@ -254,11 +261,14 @@ create a vector of values."
   - Attempting to refresh the access token in the case it has expired"
   [handler oauth2-params]
   (fn [request]
+    (log/debug "Validating oauth2 data" request)
     (cond (excluded? request (:exclude oauth2-params))
-          (handler request)
+          (do (log/debug "Excluded")
+              (handler request))
 
           (not (:oauth2 request))
-          (handler request)
+          (do (log/debug "No oauth2 data")
+              (handler request))
 
           (oauth2/valid-auth-token? (:token-validation-uri oauth2-params) (:access-token (:oauth2 request)))
           (handler request)
