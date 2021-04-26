@@ -6,7 +6,8 @@
             [uri.core :as uri]
             [clj-http.client :refer [wrap-request]]
             [cheshire.core :as json])
-  (:import [org.apache.commons.codec.binary Base64]))
+  (:import [clj_oauth2 OAuth2Exception OAuth2StateMismatchException]
+           [org.apache.commons.codec.binary Base64]))
 
 (defn make-auth-request
   [{:keys [authorization-uri client-id redirect-uri scope access-type]}
@@ -70,17 +71,16 @@
         {:keys [status body] :as response} (http/post access-token-uri request)
         {error :error :as body} (decode-response response)]
     (if (or error (not= status 200))
-      (throw (ex-info (str (if error
-                             (if (string? error)
-                               (:error_description body)
-                               (:message error)) ; Facebookism
-                             "error requesting access token")
-                           " - "
-                           (if error
-                             (if (string? error)
-                               error
-                               (:type error)) ; Facebookism
-                             "unknown")) {}))
+      (throw (OAuth2Exception. (if error
+                                 (if (string? error)
+                                   (:error_description body)
+                                   (:message error)) ; Facebookism
+                                 "error requesting access token")
+                               (if error
+                                 (if (string? error)
+                                   error
+                                   (:type error)) ; Facebookism
+                                 "unknown")))
       {:access-token (:access_token body)
        :token-type (or (:token_type body) "draft-10") ; Force.com
        :query-param access-query-param
@@ -91,13 +91,13 @@
   [endpoint & [params {expected-state :state expected-scope :scope}]]
   (let [{:keys [state error]} params]
     (cond (string? error)
-          (throw (ex-info (str (:error_description params) error) {}))
+          (throw (OAuth2Exception. (:error_description params) error))
           (and expected-state (not= state expected-state))
-          (throw (ex-info
-                   (str (format "Expected state %s but got %s"
+          (throw (OAuth2StateMismatchException.
+                   (format "Expected state %s but got %s"
                            state expected-state)
-                        state
-                        expected-state) {}))
+                   state
+                   expected-state))
           :else
           (request-access-token endpoint params))))
 
@@ -123,7 +123,7 @@
   :default [req oauth2]
   (let [{:keys [token-type]} oauth2]
     (if (:throw-exceptions req)
-      (throw (ex-info (str "Unknown token type: " token-type) {}))
+      (throw (OAuth2Exception. (str "Unknown token type: " token-type)))
       [req false])))
 
 (defn- make-handler
@@ -166,7 +166,7 @@
       (if token-added?
         (client req)
         (if throw-exceptions
-          (throw (ex-info "Missing :oauth2 params" {}))
+          (throw (OAuth2Exception. "Missing :oauth2 params"))
           (client req))))))
 
 ; FIXME: Check how to get refresh token
@@ -223,13 +223,13 @@
 
   ; Visit (:uri auth-req), login and copy code
 
-  (defn- google-access-token [code-map]
+  (defn google-access-token [code-map]
     (oauth2/get-access-token google-com-oauth2 code-map auth-req))
 
   (google-access-token
     {:code ""})
 
-  (defn- google-user-email [access-token]
+  (defn google-user-email [access-token]
     (let [response (oauth2/get "https://www.googleapis.com/oauth2/v1/userinfo" {:oauth2 access-token})]
       (select-keys (parse-string (:body response)) ["email" "verified_email" "picture"])))
 
