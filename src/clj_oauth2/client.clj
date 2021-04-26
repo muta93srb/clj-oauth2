@@ -4,7 +4,6 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [uri.core :as uri]
-            [ring.util.response :as resp]
             [clj-http.client :refer [wrap-request]]
             [cheshire.core :as json])
   (:import [org.apache.commons.codec.binary Base64]))
@@ -57,12 +56,7 @@
 
 (defn- decode-response
   [{:keys [headers body] :as response}]
-  (let [content-type (resp/get-header response "content-type")]
-    (if (and content-type
-             (or (.startsWith content-type "application/json")
-                 (.startsWith content-type "text/javascript"))) ; Facebookism
-      (json/parse-string body true)
-      (uri/form-url-decode body)))) ; Facebookism
+  (json/parse-string body true))
 
 (defn- request-access-token
   [endpoint params]
@@ -75,7 +69,6 @@
                     (update :body uri/form-url-encode))
         {:keys [status body] :as response} (http/post access-token-uri request)
         {error :error :as body} (decode-response response)]
-    (println "BODY: " body)
     (if (or error (not= status 200))
       (throw (ex-info (str (if error
                              (if (string? error)
@@ -230,7 +223,7 @@
 
   ; Visit (:uri auth-req), login and copy code
 
-  (defn- google-access-token [request]
+  (defn- google-access-token [code-map]
     (oauth2/get-access-token google-com-oauth2 code-map auth-req))
 
   (google-access-token
